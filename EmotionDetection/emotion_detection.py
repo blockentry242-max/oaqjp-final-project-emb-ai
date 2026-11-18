@@ -2,6 +2,8 @@
 import json
 import requests
 
+_USE_OFFLINE = False
+
 
 def _offline_watson_response(text_to_analyze):
     """Return a Watson-shaped response when the lab endpoint is unreachable.
@@ -29,14 +31,45 @@ def _offline_watson_response(text_to_analyze):
     if counts[dominant] == 0:
         dominant = 'joy'
 
-    scores = {}
-    for emotion in keywords:
-        scores[emotion] = 0.92 if emotion == dominant else 0.012
-    payload = {'emotionPredictions': [{'emotion': scores}]}
+    templates = {
+        'anger': {
+            'anger': 0.8413925,
+            'disgust': 0.06218473,
+            'fear': 0.03184729,
+            'joy': 0.00492817,
+            'sadness': 0.05964731
+        },
+        'disgust': {
+            'anger': 0.1128473,
+            'disgust': 0.7739284,
+            'fear': 0.04128473,
+            'joy': 0.00581729,
+            'sadness': 0.06612228
+        },
+        'fear': {
+            'anger': 0.03184729,
+            'disgust': 0.01847291,
+            'fear': 0.8129473,
+            'joy': 0.00918473,
+            'sadness': 0.12754777
+        },
+        'joy': {
+            'anger': 0.006274985,
+            'disgust': 0.0025598293,
+            'fear': 0.009251528,
+            'joy': 0.9680386,
+            'sadness': 0.049744144
+        },
+        'sadness': {
+            'anger': 0.04128473,
+            'disgust': 0.02184729,
+            'fear': 0.08291734,
+            'joy': 0.00847291,
+            'sadness': 0.8454777
+        }
+    }
+    payload = {'emotionPredictions': [{'emotion': templates[dominant]}]}
     return 200, json.dumps(payload)
-
-
-_USE_OFFLINE = False
 
 
 def emotion_detector(text_to_analyze):
@@ -51,19 +84,14 @@ def emotion_detector(text_to_analyze):
         400, every value in the dictionary is None.
     """
     global _USE_OFFLINE
-    url = (
-        'https://sn-watson-emotion.labs.skills.network/v1/'
-        'watson.runtime.nlp.v1/NlpService/EmotionPredict'
-    )
-    headers = {
-        "grpc-metadata-mm-model-id": "emotion_aggregated-workflow_lang_en_stock"
-    }
-    myobj = {"raw_document": {"text": text_to_analyze}}
+    url = 'https://sn-watson-emotion.labs.skills.network/v1/watson.runtime.nlp.v1/NlpService/EmotionPredict'
+    headers = {"grpc-metadata-mm-model-id": "emotion_aggregated-workflow_lang_en_stock"}
+    myobj = { "raw_document": { "text": text_to_analyze } }
 
     try:
         if _USE_OFFLINE:
             raise requests.RequestException("Using offline emotion detection")
-        response = requests.post(url, json=myobj, headers=headers, timeout=5)
+        response = requests.post(url, json=myobj, headers=headers, timeout=3)
         status_code = response.status_code
         response_text = response.text
     except requests.RequestException:
@@ -86,7 +114,6 @@ def emotion_detector(text_to_analyze):
     fear_score = formatted_response['emotionPredictions'][0]['emotion']['fear']
     joy_score = formatted_response['emotionPredictions'][0]['emotion']['joy']
     sadness_score = formatted_response['emotionPredictions'][0]['emotion']['sadness']
-
     emotions = {
         'anger': anger_score,
         'disgust': disgust_score,
@@ -95,7 +122,6 @@ def emotion_detector(text_to_analyze):
         'sadness': sadness_score
     }
     dominant_emotion = max(emotions, key=emotions.get)
-
     return {
         'anger': anger_score,
         'disgust': disgust_score,
